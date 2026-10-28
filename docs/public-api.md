@@ -49,6 +49,7 @@ it. Grant the minimum.
 | `contacts:write`     | Create and update contacts               |
 | `conversations:read` | List and read conversations              |
 | `broadcasts:send`    | Launch broadcast campaigns               |
+| `broadcasts:read`    | Read broadcasts and recipient delivery status |
 | `webhooks:manage`    | Register and manage outbound webhooks    |
 
 A key with **no scopes** still authenticates and can call
@@ -268,9 +269,51 @@ request fails with `400 bad_request`. Response (202):
 
 ### `GET /api/v1/broadcasts/{id}`
 
-Broadcast status + counts. Scope: `broadcasts:send`. `status` moves
+Broadcast status + counts. Scope: `broadcasts:read` or `broadcasts:send`. `status` moves
 `sending` → `sent`; `delivered_count` / `read_count` keep climbing as
 Meta delivery webhooks arrive. `404` for another account's broadcast.
+
+### `GET /api/v1/broadcasts/{id}/recipients`
+
+Retrieve individual recipient records and delivery statuses for a broadcast.
+Scope: `broadcasts:read` or `broadcasts:send`.
+
+Keyset-paginated (see [Pagination](#pagination)). Optional filter: `?status=`
+(`pending` / `sent` / `delivered` / `read` / `replied` / `failed`).
+
+Returns recipient-level delivery states, timestamps, contact info (`phone`, `name`),
+and Meta's message ID (`whatsapp_message_id`) for tracing. `404` if the broadcast
+belongs to another account or does not exist.
+
+```bash
+curl "https://your-crm.example.com/api/v1/broadcasts/b9c8.../recipients?limit=50" \
+  -H "Authorization: Bearer wacrm_live_xxx"
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "18f5e3b2-...",
+      "broadcast_id": "b9c8...",
+      "contact_id": "c1a2...",
+      "phone": "+919345018227",
+      "name": "Jane Doe",
+      "status": "delivered",
+      "whatsapp_message_id": "wamid.HBgLM...",
+      "sent_at": "2026-10-20T10:44:19.042Z",
+      "delivered_at": "2026-10-20T10:44:21.000Z",
+      "read_at": null,
+      "replied_at": null,
+      "error_message": null,
+      "created_at": "2026-10-20T10:44:10.000Z"
+    }
+  ],
+  "meta": {
+    "next_cursor": "eyJ..."
+  }
+}
+```
 
 ## Pagination
 

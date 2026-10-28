@@ -201,6 +201,15 @@ export async function createBroadcast(
   // an orphaned campaign that looked like it was sending but had no
   // delivery plan (issue #370). The function body is atomic, so a recipient
   // failure now rolls the parent back and nothing orphaned survives.
+
+  // test debug code
+  console.log('[broadcast-core] RPC input diagnostic', {
+    contactIdsCount: deduped.length,
+    contactIds: deduped.map((r) => r.contactId),
+    templateParamsCount: deduped.length,
+    templateParams: deduped.map((r) => r.params),
+  });
+
   const { data: createdRows, error: createErr } = await db.rpc(
     'create_broadcast_with_recipients',
     {
@@ -213,6 +222,7 @@ export async function createBroadcast(
       p_contact_ids: deduped.map((r) => r.contactId),
       // Frozen per-recipient params (migration 038) — without them a
       // resume of this broadcast has no way to reconstruct {{1}}.
+      // p_template_params: deduped.map((r) => r.params),
       p_template_params: deduped.map((r) => r.params),
     }
   );
@@ -225,11 +235,64 @@ export async function createBroadcast(
 
   // Pair each inserted recipient row back to its phone/params by
   // contact_id — unambiguous now that duplicates are collapsed.
-  const byContact = new Map(deduped.map((r) => [r.contactId, r]));
+  // const byContact = new Map(deduped.map((r) => [r.contactId, r]));
+
+
+  // console.log('[broadcast-core] Contact mapping diagnostic', {
+  //   dedupedContactIds: deduped.map((r) => r.contactId),
+  //   rpcRows: createdRows.map((row: any) => ({
+  //     recipientId: row.recipient_id,
+  //     contactId: row.contact_id,
+  //   })),
+  // });
+
+  // const planned: PlannedRecipient[] = createdRows.map(
+  //   (row: { recipient_id: string; contact_id: string }) => {
+  //     const r = byContact.get(row.contact_id)!;
+  //     return { recipientRowId: row.recipient_id, phone: r.phone, params: r.params };
+  //   }
+  // );
+
+  const byContact = new Map(
+    deduped.map((r) => [r.contactId, r] as const)
+  );
+
+  console.log('[broadcast-core] Contact mapping diagnostic', {
+    dedupedCount: deduped.length,
+    dedupedContactIds: deduped.map((r) => r.contactId),
+    rpcRowCount: createdRows.length,
+    rpcRows: createdRows.map((row: any) => ({
+      recipientId: row.recipient_id,
+      contactId: row.contact_id,
+      contactIdType: typeof row.contact_id,
+    })),
+  });
+
   const planned: PlannedRecipient[] = createdRows.map(
     (row: { recipient_id: string; contact_id: string }) => {
-      const r = byContact.get(row.contact_id)!;
-      return { recipientRowId: row.recipient_id, phone: r.phone, params: r.params };
+      const r = byContact.get(row.contact_id);
+
+      if (!r) {
+        console.error('[broadcast-core] Recipient mapping mismatch', {
+          recipientId: row.recipient_id,
+          returnedContactId: row.contact_id,
+          returnedContactIdType: typeof row.contact_id,
+          knownContactIds: [...byContact.keys()],
+          broadcastId: createdRows[0]?.broadcast_id,
+        });
+
+        throw new BroadcastError(
+          'recipient_mapping_mismatch',
+          'Database returned a recipient whose contact could not be matched.',
+          500
+        );
+      }
+
+      return {
+        recipientRowId: row.recipient_id,
+        phone: r.phone,
+        params: r.params,
+      };
     }
   );
 

@@ -1,6 +1,6 @@
 // ============================================================
 // GET /api/v1/broadcasts/{id} — broadcast status + counts
-// (scope: broadcasts:send).
+// (scope: broadcasts:read or broadcasts:send).
 //
 // Poll this after POST /api/v1/broadcasts to watch the fan-out
 // progress. `status` moves 'sending' → 'sent'; the delivered/read
@@ -16,7 +16,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const ctx = await requireApiKey(request, 'broadcasts:send');
+    const ctx = await requireApiKey(request, [
+      'broadcasts:read',
+      'broadcasts:send',
+    ]);
     const { id } = await params;
 
     const { data, error } = await ctx.supabase

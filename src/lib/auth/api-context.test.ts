@@ -117,6 +117,27 @@ describe("requireApiKey", () => {
     expect(ctx.accountId).toBe("acct-1");
   });
 
+  it("passes when the key has one of multiple accepted scopes", async () => {
+    findActiveKeyByHash.mockResolvedValue(row({ scopes: ["broadcasts:read"] }));
+    const ctx = await requireApiKey(reqWith(`Bearer ${KEY}`), [
+      "broadcasts:read",
+      "broadcasts:send",
+    ]);
+    expect(ctx.accountId).toBe("acct-1");
+  });
+
+  it("403s when the key lacks all of the accepted scopes", async () => {
+    findActiveKeyByHash.mockResolvedValue(row({ scopes: ["contacts:read"] }));
+    await expectApiError(
+      requireApiKey(reqWith(`Bearer ${KEY}`), [
+        "broadcasts:read",
+        "broadcasts:send",
+      ]),
+      "forbidden",
+      403,
+    );
+  });
+
   it("429s once the per-key budget is exhausted", async () => {
     findActiveKeyByHash.mockResolvedValue(row());
     // Burn the whole window.
